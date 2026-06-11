@@ -3,6 +3,7 @@ name: Build App With Pake CLI
 env:
   NODE_VERSION: "22"
   PNPM_VERSION: "10.26.2"
+  NO_STRIP: "1" # Bypasses library stripping issues common on glibc 2.38+ / Ubuntu 24.04+
 
 on:
   workflow_dispatch:
@@ -51,7 +52,7 @@ on:
       targets:
         description: "Package formats (comma-separated: deb,appimage,rpm)"
         required: false
-        default: "deb"
+        default: "deb,appimage" # Updated to include AppImage by default
 
 jobs:
   build:
@@ -92,6 +93,13 @@ jobs:
             ~/.cargo/git/db/
             src-tauri/target/
           key: ${{ runner.os }}-cargo-pake-${{ hashFiles('**/Cargo.lock') }}
+
+      # Required step to allow AppImage packaging to execute on Linux runners
+      - name: Install Linux AppImage dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfuse2
 
       - name: Build App (Linux/macOS)
         if: runner.os != 'Windows'
@@ -176,7 +184,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: ${{ inputs.name }}-Linux-deb
-          path: ${{ inputs.name }}.deb
+          path: "*.deb" # Replaced hardcoded name with wildcard to handle lowercase normalization
           retention-days: 3
           if-no-files-found: ignore
 
@@ -185,7 +193,16 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: ${{ inputs.name }}-Linux-AppImage
-          path: ${{ inputs.name }}.AppImage
+          path: "*.AppImage" # Replaced hardcoded name with wildcard to handle lowercase normalization
+          retention-days: 3
+          if-no-files-found: ignore
+
+      - name: Upload RPM (Linux)
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ inputs.name }}-Linux-rpm
+          path: "*.rpm" # Fallback support for RPM packages
           retention-days: 3
           if-no-files-found: ignore
 
